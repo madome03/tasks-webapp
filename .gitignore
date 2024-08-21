@@ -1,0 +1,19 @@
+# Node modules
+node_modules/
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+
+# Python virtual environment
+venv/
+
+# Compiled Python files
+*.pyc
+__pycache__/
+
+# ZIP files (if you don't want to include the Lambda packages)
+*.zip
+
+# Local environment files
+.env
