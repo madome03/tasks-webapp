@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { Construct } from 'constructs';
 import { DatabaseStack } from './database-stack';
+import { DbInitStack } from './db-init-stack';
 import { CognitoStack } from './cognito-stack';
 import { LambdaStack } from './lambda-stack';
 import { APIGatewayStack } from './api-gateway-stack';
@@ -43,6 +44,14 @@ export class MainStack extends cdk.Stack {
       lambdaSecurityGroup,
     });
 
+    const dbInitStack = new DbInitStack(this, 'DbInitStack', {
+      vpc,
+      lambdaSecurityGroup,
+      database: databaseStack.database,
+      databaseSecretArn: databaseStack.databaseSecretArn,
+      dbName: databaseStack.dbName,
+    });
+
     const cognitoStack = new CognitoStack(this, 'CognitoStack', {
       vpc,
       lambdaSecurityGroup,
@@ -67,7 +76,7 @@ export class MainStack extends cdk.Stack {
     });
 
     // Ensure that DBInit runs before the other Lambdas
-    lambdaStack.node.addDependency(databaseStack.dbInitCustomResource);
-    cognitoStack.node.addDependency(databaseStack.dbInitCustomResource);
+    lambdaStack.node.addDependency(dbInitStack);
+    cognitoStack.node.addDependency(dbInitStack);
   }
 }

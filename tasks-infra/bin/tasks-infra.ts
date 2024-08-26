@@ -4,6 +4,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import { MainStack } from '../lib/main-stack';
 import { DatabaseStack } from '../lib/database-stack';
+import { DbInitStack } from '../lib/db-init-stack';
 import { CognitoStack } from '../lib/cognito-stack';
 import { LambdaStack } from '../lib/lambda-stack';
 import { APIGatewayStack } from '../lib/api-gateway-stack';
@@ -50,6 +51,19 @@ switch (stackName) {
       lambdaSecurityGroup,
     });
     break;
+  case 'DbInitStack':
+    const databaseStackForDbInit = new DatabaseStack(app, 'DatabaseStackForDbInit', {
+      vpc,
+      lambdaSecurityGroup,
+    });
+    new DbInitStack(app, 'DbInitStack', {
+      vpc,
+      lambdaSecurityGroup,
+      database: databaseStackForDbInit.database,
+      databaseSecretArn: databaseStackForDbInit.databaseSecretArn,
+      dbName: databaseStackForDbInit.dbName,
+    });
+    break;
   case 'CognitoStack':
     const databaseStackForCognito = new DatabaseStack(app, 'DatabaseStackForCognito', {
       vpc,
@@ -66,6 +80,13 @@ switch (stackName) {
     const databaseStackForLambda = new DatabaseStack(app, 'DatabaseStackForLambda', {
       vpc,
       lambdaSecurityGroup,
+    });
+    const dbInitStackForLambda = new DbInitStack(app, 'DbInitStackForLambda', {
+      vpc,
+      lambdaSecurityGroup,
+      database: databaseStackForLambda.database,
+      databaseSecretArn: databaseStackForLambda.databaseSecretArn,
+      dbName: databaseStackForLambda.dbName,
     });
     const cognitoStackForLambda = new CognitoStack(app, 'CognitoStackForLambda', {
       vpc,
@@ -86,6 +107,13 @@ switch (stackName) {
     const databaseStackForApiGateway = new DatabaseStack(app, 'DatabaseStackForApiGateway', {
       vpc,
       lambdaSecurityGroup,
+    });
+    const dbInitStackForApiGateway = new DbInitStack(app, 'DbInitStackForApiGateway', {
+      vpc,
+      lambdaSecurityGroup,
+      database: databaseStackForApiGateway.database,
+      databaseSecretArn: databaseStackForApiGateway.databaseSecretArn,
+      dbName: databaseStackForApiGateway.dbName,
     });
     const cognitoStackForApiGateway = new CognitoStack(app, 'CognitoStackForApiGateway', {
       vpc,
