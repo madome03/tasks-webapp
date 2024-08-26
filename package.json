@@ -1,0 +1,15 @@
+{
+  "scripts": {
+    "deploy:all": "cdk deploy --all",
+    "deploy:main": "cdk deploy MainStack",
+    "deploy:database": "cdk deploy DatabaseStack",
+    "deploy:cognito": "cdk deploy CognitoStack",
+    "deploy:lambda": "cdk deploy LambdaStack",
+    "deploy:apigateway": "cdk deploy APIGatewayStack"
+  },
+
+  "dependencies": {
+    "aws": "^0.0.3-2"
+  }
+  
+}
