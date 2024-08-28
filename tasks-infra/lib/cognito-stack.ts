@@ -1,26 +1,18 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as ec2 from 'aws-cdk-lib/aws-ec2';
-import * as path from 'path';
 
 interface CognitoStackProps extends cdk.StackProps {
-  vpc: ec2.IVpc;
-  lambdaSecurityGroup: ec2.ISecurityGroup;
-  databaseSecretArn: string;
-  dbName: string;
+  // Remove dependencies on VPC, Lambda, and Database
 }
 
 export class CognitoStack extends cdk.Stack {
   public readonly userPool: cognito.UserPool;
   public readonly userPoolClient: cognito.UserPoolClient;
-  public readonly preSignUpTrigger: lambda.Function;
-  public readonly postConfirmationTrigger: lambda.Function;
 
   constructor(scope: Construct, id: string, props: CognitoStackProps) {
     super(scope, id, props);
-    
+
     this.userPool = new cognito.UserPool(this, 'TasksUserPool', {
       selfSignUpEnabled: false,
       signInAliases: {
@@ -50,34 +42,6 @@ export class CognitoStack extends cdk.Stack {
       userPool: this.userPool,
       generateSecret: false,
     });
-
-    const commonLambdaProps = {
-      runtime: lambda.Runtime.PYTHON_3_9,
-      vpc: props.vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }, // Updated this line
-      securityGroups: [props.lambdaSecurityGroup],
-      environment: {
-        USER_POOL_ID: this.userPool.userPoolId,
-        DB_SECRET_ARN: props.databaseSecretArn,
-        DB_NAME: props.dbName,
-      },
-    };
-
-    // Cognito Triggers
-    this.preSignUpTrigger = new lambda.Function(this, 'PreSignUpTrigger', {
-      ...commonLambdaProps,
-      handler: 'preSignup.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../../tasks-api/lambda_cognito_triggers.zip')),
-    });
-
-    this.postConfirmationTrigger = new lambda.Function(this, 'PostConfirmationTrigger', {
-      ...commonLambdaProps,
-      handler: 'postSignup.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../../tasks-api/lambda_cognito_triggers.zip')),
-    });
-
-    this.userPool.addTrigger(cognito.UserPoolOperation.PRE_SIGN_UP, this.preSignUpTrigger);
-    this.userPool.addTrigger(cognito.UserPoolOperation.POST_CONFIRMATION, this.postConfirmationTrigger);
 
     // Outputs
     new cdk.CfnOutput(this, 'UserPoolId', {

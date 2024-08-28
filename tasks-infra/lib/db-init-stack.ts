@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -10,7 +11,7 @@ import * as fs from 'fs';
 interface DbInitStackProps extends cdk.StackProps {
   vpc: ec2.IVpc;
   lambdaSecurityGroup: ec2.ISecurityGroup;
-  database: rds.DatabaseInstance;
+  database: rds.IDatabaseInstance;
   databaseSecretArn: string;
   dbName: string;
 }
@@ -37,9 +38,8 @@ export class DbInitStack extends cdk.Stack {
     });
 
     // Grant the Lambda function permission to read the secret
-    if (props.database.secret) {
-      props.database.secret.grantRead(this.dbInitFunction);
-    }
+    const secret = secretsmanager.Secret.fromSecretCompleteArn(this, 'DbSecret', props.databaseSecretArn);
+    secret.grantRead(this.dbInitFunction);
 
     const migrationVersion = this.calculateMigrationHash();
 
