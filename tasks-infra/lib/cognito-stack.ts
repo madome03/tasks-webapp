@@ -1,9 +1,11 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 
 interface CognitoStackProps extends cdk.StackProps {
-  // Remove dependencies on VPC, Lambda, and Database
+  preSignUpFunctionArn: string;
+  postSignUpFunctionArn: string;
 }
 
 export class CognitoStack extends cdk.Stack {
@@ -12,6 +14,9 @@ export class CognitoStack extends cdk.Stack {
 
   constructor(scope: Construct, id: string, props: CognitoStackProps) {
     super(scope, id, props);
+
+    const preSignUpFunction = lambda.Function.fromFunctionArn(this, 'PreSignUpFunction', props.preSignUpFunctionArn);
+    const postSignUpFunction = lambda.Function.fromFunctionArn(this, 'PostSignUpFunction', props.postSignUpFunctionArn);
 
     this.userPool = new cognito.UserPool(this, 'TasksUserPool', {
       selfSignUpEnabled: false,
@@ -36,6 +41,10 @@ export class CognitoStack extends cdk.Stack {
         requireDigits: true,
         requireSymbols: true,
       },
+      lambdaTriggers: {
+        preSignUp: preSignUpFunction,
+        postConfirmation: postSignUpFunction,
+      },
     });
 
     this.userPoolClient = new cognito.UserPoolClient(this, 'TasksUserPoolClient', {
@@ -47,6 +56,7 @@ export class CognitoStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'UserPoolId', {
       value: this.userPool.userPoolId,
       description: 'ID of the Cognito User Pool',
+      exportName: 'UserPoolId',
     });
 
     new cdk.CfnOutput(this, 'UserPoolClientId', {

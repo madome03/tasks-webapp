@@ -5,6 +5,7 @@ import * as rds from 'aws-cdk-lib/aws-rds';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as path from 'path';
 
 interface LambdaStackProps extends cdk.StackProps {
@@ -17,14 +18,35 @@ interface LambdaStackProps extends cdk.StackProps {
 }
 
 export class LambdaStack extends cdk.Stack {
-  public readonly backendFunction: lambda.Function;
-  public readonly companyManagementFunction: lambda.Function;
-  public readonly userManagementFunction: lambda.Function;
+  public readonly mainFunction: lambda.Function;
+  public readonly companyLogosBucket: s3.Bucket;
 
   constructor(scope: Construct, id: string, props: LambdaStackProps) {
     super(scope, id, props);
 
-    const lambdaRole = new iam.Role(this, 'LambdaRole', {
+    // Create S3 bucket for company logos
+    this.companyLogosBucket = new s3.Bucket(this, 'CompanyLogosBucket', {
+      versioned: true,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    const lambdaRole = this.createLambdaRole(props.databaseSecretArn);
+
+    const commonLambdaProps = this.getCommonLambdaProps(props, lambdaRole);
+
+    this.mainFunction = this.createLambdaFunction('MainFunction', 'lambda_handler.lambda_handler', '../../tasks-api/dependencies/lambda_backend.zip', commonLambdaProps);
+
+    // Grant necessary permissions
+    this.grantDatabaseAccess(props.database);
+    this.grantS3Access();
+
+    // Output the Lambda function ARN
+    this.createOutputs();
+  }
+
+  private createLambdaRole(databaseSecretArn: string): iam.Role {
+    const role = new iam.Role(this, 'LambdaRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaVPCAccessExecutionRole'),
@@ -32,66 +54,64 @@ export class LambdaStack extends cdk.Stack {
       ],
     });
 
-    // Grant read access to the database secret
-    lambdaRole.addToPolicy(new iam.PolicyStatement({
+    role.addToPolicy(new iam.PolicyStatement({
       actions: ['secretsmanager:GetSecretValue'],
-      resources: [props.databaseSecretArn],
+      resources: [databaseSecretArn],
     }));
 
-    const commonLambdaProps = {
+    return role;
+  }
+
+  private getCommonLambdaProps(props: LambdaStackProps, role: iam.Role): Partial<lambda.FunctionProps> {
+    return {
       runtime: lambda.Runtime.PYTHON_3_9,
       vpc: props.vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }, // Updated this line
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [props.lambdaSecurityGroup],
-      role: lambdaRole,
+      role: role,
       environment: {
         DB_SECRET_ARN: props.databaseSecretArn,
         DB_NAME: 'tasksdb',
         COGNITO_USER_POOL_ID: props.userPool.userPoolId,
         COGNITO_APP_CLIENT_ID: props.userPoolClient.userPoolClientId,
+        COMPANY_LOGOS_BUCKET: this.companyLogosBucket.bucketName,
       },
     };
+  }
 
-    this.backendFunction = new lambda.Function(this, 'TasksFunction', {
-      ...commonLambdaProps,
-      handler: 'tasks.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../../tasks-api/lambda_backend.zip')),
+  private createLambdaFunction(
+    id: string,
+    handler: string,
+    codePath: string,
+    props: Partial<lambda.FunctionProps>
+  ): lambda.Function {
+    return new lambda.Function(this, id, {
+      ...props,
+      handler: handler,
+      code: lambda.Code.fromAsset(path.join(__dirname, codePath)),
+      runtime: lambda.Runtime.PYTHON_3_9,
+    });
+  }
+
+  private grantDatabaseAccess(database: rds.IDatabaseInstance) {
+    database.grantConnect(this.mainFunction);
+  }
+
+  private grantS3Access() {
+    this.companyLogosBucket.grantReadWrite(this.mainFunction);
+  }
+
+  private createOutputs() {
+    new cdk.CfnOutput(this, 'MainFunctionArn', {
+      value: this.mainFunction.functionArn,
+      description: 'Main Lambda Function ARN',
+      exportName: 'TasksMainFunctionArn',
     });
 
-    this.companyManagementFunction = new lambda.Function(this, 'CompanyManagementFunction', {
-      ...commonLambdaProps,
-      handler: 'companyManagementLambda.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../../tasks-api/lambda_company_management.zip')),
-    });
-
-    this.userManagementFunction = new lambda.Function(this, 'UserManagementFunction', {
-      ...commonLambdaProps,
-      handler: 'userManagementLambda.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../../tasks-api/lambda_user_management.zip')),
-    });
-
-    // Grant necessary permissions
-    props.database.grantConnect(this.backendFunction);
-    props.database.grantConnect(this.companyManagementFunction);
-    props.database.grantConnect(this.userManagementFunction);
-
-    // Output the Lambda function ARNs
-    new cdk.CfnOutput(this, 'BackendFunctionArn', {
-      value: this.backendFunction.functionArn,
-      description: 'Backend Lambda Function ARN',
-      exportName: 'TasksBackendFunctionArn',
-    });
-
-    new cdk.CfnOutput(this, 'CompanyManagementFunctionArn', {
-      value: this.companyManagementFunction.functionArn,
-      description: 'Company Management Lambda Function ARN',
-      exportName: 'TasksCompanyManagementFunctionArn',
-    });
-
-    new cdk.CfnOutput(this, 'UserManagementFunctionArn', {
-      value: this.userManagementFunction.functionArn,
-      description: 'User Management Lambda Function ARN',
-      exportName: 'TasksUserManagementFunctionArn',
+    new cdk.CfnOutput(this, 'CompanyLogosBucketName', {
+      value: this.companyLogosBucket.bucketName,
+      description: 'Company Logos S3 Bucket Name',
+      exportName: 'CompanyLogosBucketName',
     });
   }
 }

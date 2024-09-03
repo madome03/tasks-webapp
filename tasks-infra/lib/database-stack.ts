@@ -58,5 +58,11 @@ export class DatabaseStack extends cdk.Stack {
       value: this.databaseSecretArn,
       description: 'Database secret ARN',
     });
+
+     // Output the secret name for easy retrieval
+     new cdk.CfnOutput(this, 'DatabaseSecretName', {
+      value: this.database.secret?.secretName || '',
+      description: 'Name of the database secret in Secrets Manager',
+    });
   }
 }
